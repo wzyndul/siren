@@ -23,7 +23,7 @@ def train(model, train_dataloader, epochs, lr, steps_til_summary, epochs_til_che
                                   history_size=50, line_search_fn='strong_wolfe')
 
     if os.path.exists(model_dir):
-        val = input("The model directory %s exists. Overwrite? (y/n)"%model_dir)
+        val = input("The model directory %s exists. Overwrite? (y/n)" % model_dir)
         if val == 'y':
             shutil.rmtree(model_dir)
 
@@ -38,14 +38,15 @@ def train(model, train_dataloader, epochs, lr, steps_til_summary, epochs_til_che
     writer = SummaryWriter(summaries_dir)
 
     total_steps = 0
+    accumulation_steps = 2  # Set the number of gradient accumulation steps
     with tqdm(total=len(train_dataloader) * epochs) as pbar:
         train_losses = []
         for epoch in range(epochs):
-            if not epoch % epochs_til_checkpoint and epoch:
-                torch.save(model.state_dict(),
-                           os.path.join(checkpoints_dir, 'model_epoch_%04d.pth' % epoch))
-                np.savetxt(os.path.join(checkpoints_dir, 'train_losses_epoch_%04d.txt' % epoch),
-                           np.array(train_losses))
+            # if not epoch % epochs_til_checkpoint and epoch:
+            #     torch.save(model.state_dict(),
+            #                os.path.join(checkpoints_dir, 'model_epoch_%04d.pth' % epoch))
+            #     np.savetxt(os.path.join(checkpoints_dir, 'train_losses_epoch_%04d.txt' % epoch),
+            #                np.array(train_losses))
 
             for step, (model_input, gt) in enumerate(train_dataloader):
                 start_time = time.time()
@@ -64,7 +65,7 @@ def train(model, train_dataloader, epochs, lr, steps_til_summary, epochs_til_che
                         losses = loss_fn(model_output, gt)
                         train_loss = 0.
                         for loss_name, loss in losses.items():
-                            train_loss += loss.mean() 
+                            train_loss += loss.mean()
                         train_loss.backward()
                         return train_loss
                     optim.step(closure)
@@ -83,30 +84,34 @@ def train(model, train_dataloader, epochs, lr, steps_til_summary, epochs_til_che
                     writer.add_scalar(loss_name, single_loss, total_steps)
                     train_loss += single_loss
 
+                # Normalize loss by accumulation steps
+                train_loss = train_loss / accumulation_steps
                 train_losses.append(train_loss.item())
                 writer.add_scalar("total_train_loss", train_loss, total_steps)
 
                 if not total_steps % steps_til_summary:
-                    torch.save(model.state_dict(),
+                    if epoch == epochs - 1:
+                        torch.save(model.state_dict(),
                                os.path.join(checkpoints_dir, 'model_current.pth'))
-                    summary_fn(model, model_input, gt, model_output, writer, total_steps)
+                        summary_fn(model, model_input, gt, model_output, writer, total_steps)
 
                 if not use_lbfgs:
-                    optim.zero_grad()
                     train_loss.backward()
 
-                    if clip_grad:
-                        if isinstance(clip_grad, bool):
-                            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.)
-                        else:
-                            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=clip_grad)
-
-                    optim.step()
+                    # Perform optimizer step every accumulation_steps
+                    if (step + 1) % accumulation_steps == 0:
+                        if clip_grad:
+                            if isinstance(clip_grad, bool):
+                                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.)
+                            else:
+                                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=clip_grad)
+                        optim.step()
+                        optim.zero_grad()
 
                 pbar.update(1)
 
                 if not total_steps % steps_til_summary:
-                    tqdm.write("Epoch %d, Total loss %0.6f, iteration time %0.6f" % (epoch, train_loss, time.time() - start_time))
+                    # tqdm.write("Epoch %d, Total loss %0.6f, iteration time %0.6f" % (epoch, train_loss, time.time() - start_time))
 
                     if val_dataloader is not None:
                         print("Running validation set...")
