@@ -42,6 +42,7 @@ coord_dataset = dataio.ImplicitAudioWrapper(audio_dataset)
 
 dataloader = DataLoader(coord_dataset, shuffle=True, batch_size=opt.batch_size, pin_memory=True, num_workers=0)
 
+
 # Define the model.
 if opt.model_type == 'sine' or opt.model_type == 'relu' or opt.model_type == 'tanh':
     model = modules.SingleBVPNet(type=opt.model_type, mode='mlp', in_features=1)
