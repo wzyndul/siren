@@ -48,41 +48,35 @@ class SDFDecoder(torch.nn.Module):
         return self.model(model_in)['model_out']
 
 
-def find_temperature(decoder, x, y, z_min, z_max, max_iterations=50):
+def find_temperature(decoder, x, y, z_min, z_max, epsilon=1e-3):
     """
     Find the temperature (Z) value where the SDF is closest to zero for given X and Y coordinates.
-
     :param decoder: The trained neural network
     :param x: X coordinate
     :param y: Y coordinate
     :param z_min: Minimum possible temperature
     :param z_max: Maximum possible temperature
-    :param max_iterations: Maximum number of binary search iterations
+    :param epsilon: Tolerance for considering SDF close enough to zero and for search interval
     :return: Estimated temperature (Z) value closest to SDF=0
     """
     device = next(decoder.parameters()).device
 
-    closest_z = None
-    closest_sdf = float('inf')
-
-    for _ in range(max_iterations):
+    while z_max - z_min > epsilon:
         z_mid = (z_min + z_max) / 2
         point = torch.tensor([[x, y, z_mid]], device=device)
 
         with torch.no_grad():
             sdf_value = decoder(point).item()
 
-        # Update closest if this is the closest to zero we've seen
-        if abs(sdf_value) < abs(closest_sdf):
-            closest_z = z_mid
-            closest_sdf = sdf_value
+        if abs(sdf_value) < epsilon:
+            return z_mid
 
         if sdf_value > 0:
             z_max = z_mid
         else:
             z_min = z_mid
 
-    return closest_z
+    return (z_min + z_max) / 2
 
 
 sdf_decoder = SDFDecoder()
@@ -104,10 +98,10 @@ for row in coords:
 results = np.array(results)
 
 # Save the results to "results.txt"
-with open('/home/likewise-open/ADM/242575/Desktop/results.txt', 'w') as f:
+with open('/home/likewise-open/ADM/242575/Desktop/results2.txt', 'w') as f:
     for result in results:
         f.write(f"{result[0]} {result[1]} {result[2]} {result[3]}\n")
-print("Results saved to 'results.txt'")
+print("Results saved to 'results2.txt'")
 
 
 
@@ -142,6 +136,9 @@ print("Results saved to 'results.txt'")
 # print("Results saved to 'results.txt'")
 
 
+
+
+# original code
 
 #
 # root_path = os.path.join(opt.logging_root, opt.experiment_name)
