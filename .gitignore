@@ -127,4 +127,4 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
-experiment_scripts/logs/experiment_1_rec/test.ply
+experiment_scripts/logs/
