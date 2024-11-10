@@ -2,6 +2,7 @@
 '''
 
 # Enable import from parent package
+from comet_ml import Experiment
 import os
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -11,6 +12,7 @@ import modules, utils
 import sdf_meshing
 import configargparse
 import numpy as np
+
 
 p = configargparse.ArgumentParser()
 p.add('-c', '--config_filepath', required=False, is_config_file=True, help='Path to config file.')
@@ -47,101 +49,139 @@ class SDFDecoder(torch.nn.Module):
         model_in = {'coords': coords}
         return self.model(model_in)['model_out']
 
-
-def find_temperature(decoder, x, y, z_min, z_max, epsilon=1e-3):
-    """
-    Find the temperature (Z) value where the SDF is closest to zero for given X and Y coordinates.
-    :param decoder: The trained neural network
-    :param x: X coordinate
-    :param y: Y coordinate
-    :param z_min: Minimum possible temperature
-    :param z_max: Maximum possible temperature
-    :param epsilon: Tolerance for considering SDF close enough to zero and for search interval
-    :return: Estimated temperature (Z) value closest to SDF=0
-    """
-    device = next(decoder.parameters()).device
-
-    while z_max - z_min > epsilon:
-        z_mid = (z_min + z_max) / 2
-        point = torch.tensor([[x, y, z_mid]], device=device)
-
-        with torch.no_grad():
-            sdf_value = decoder(point).item()
-
-        if abs(sdf_value) < epsilon:
-            return z_mid
-
-        if sdf_value > 0:
-            z_max = z_mid
-        else:
-            z_min = z_mid
-
-    return (z_min + z_max) / 2
-
+DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 sdf_decoder = SDFDecoder()
-
-
+sdf_decoder.to(DEVICE)
 sdf_decoder.eval()
 
+
+# def find_temperature(decoder, x, y, z_min, z_max, epsilon=1e-4):
+#     device = next(decoder.parameters()).device
+
+#     best_z = None
+#     best_sdf_abs = float('inf')
+#     iterations = 0
+#     max_iterations = 50
+
+#     while z_max - z_min > epsilon and iterations < max_iterations:
+#         z_mid = (z_min + z_max) / 2
+#         point = torch.tensor([[x, y, z_mid]], device=device)
+
+#         with torch.no_grad():
+#             sdf_value = decoder(point).item()
+
+#         if abs(sdf_value) < best_sdf_abs:
+#             best_z = z_mid
+#             best_sdf_abs = abs(sdf_value)
+
+#         if abs(sdf_value) < epsilon:
+#             return z_mid
+
+#         if sdf_value > 0:
+#             z_max = z_mid
+#         else:
+#             z_min = z_mid
+        
+#         iterations += 1
+
+#     return best_z
+
+
+def find_temperature_batch(decoder, x, y, z_min, z_max, num_samples=1000):
+    z_values = torch.linspace(z_min, z_max, num_samples, device=DEVICE)
+
+
+    x_values = torch.full((num_samples,), x, device=DEVICE)
+    y_values = torch.full((num_samples,), y, device=DEVICE)
+    points = torch.stack([x_values, y_values, z_values], dim=1)
+
+    with torch.no_grad():
+        sdf_values = decoder(points).squeeze()
+
+
+    abs_sdf_values = torch.abs(sdf_values)
+    min_idx = torch.argmin(abs_sdf_values)
+    best_z = z_values[min_idx].item()
+    return best_z
+
+
+
+
+
+experiment = Experiment(
+api_key="RVIjdz27W32Dx6WrR51bEWg24",
+project_name="siren",
+workspace="ketiovv"
+)
+
+
+
+
+differences = []
+squared_errors = []
+total_error = 0
 coords = []
-with open('/home/likewise-open/ADM/242575/Desktop/input_cords.xyz', 'r') as f:
+
+# Load coordinates from the file
+with open('/home/likewise-open/ADM/242575/Desktop/testing/testing_data.txt', 'r') as f:
     for line in f:
         x, y, z = map(float, line.strip().split()[:3])  # Read only the first 3 columns
         coords.append([x, y, z])
 
+coords_tensor = torch.tensor(coords, device=DEVICE)
+
+# Process all coordinates in batches
+batch_size = 128  # Adjust batch size based on memory usage and GPU capacity
 results = []
-for row in coords:
-    predicted_z = find_temperature(sdf_decoder, row[0], row[1], -30, 45)
-    results.append([row[0], row[1], row[2], predicted_z])
+differences = []
+squared_errors = []
+
+for i in range(0, len(coords_tensor), batch_size):
+    batch = coords_tensor[i:i + batch_size]
+    batch_results = []
+    
+    # Process each (x, y) pair in the batch and find best z
+    for row in batch:
+        x, y, true_z = row[0].item(), row[1].item(), row[2].item()
+        predicted_z = find_temperature_batch(sdf_decoder, x, y, -11, 34)
+        
+        difference = predicted_z - true_z
+        squared_error = difference ** 2
+        batch_results.append([x, y, true_z, predicted_z])
+        differences.append(difference)
+        squared_errors.append(squared_error)
+    
+    results.extend(batch_results)
+
+    if i % 10 == 0:
+        print(f"row: {i}")
+
+# Calculate final results
+total_error = sum(squared_errors)
+mse = total_error / len(squared_errors) 
+rmse = mse ** 0.5  
+mae = sum(abs(d) for d in differences) / len(differences)  # Mean Absolute Error
+
+# Print metrics
+print(f"Total error: {total_error}")
+print(f"Mean Squared Error (MSE): {mse}")
+print(f"Root Mean Squared Error (RMSE): {rmse}")
+print(f"Mean Absolute Error (MAE): {mae}")
+
+
+
 
 results = np.array(results)
-
-# Save the results to "results.txt"
-with open('/home/likewise-open/ADM/242575/Desktop/results2.txt', 'w') as f:
+with open(f'/home/likewise-open/ADM/242575/Desktop/testing_output_12000batch.txt', 'w') as f:
     for result in results:
         f.write(f"{result[0]} {result[1]} {result[2]} {result[3]}\n")
-print("Results saved to 'results2.txt'")
+print("Results saved")
 
-
-
-
-# sdf_decoder.eval() # moja linijka
-#
-# coords = []
-# with open('/home/likewise-open/ADM/242575/Desktop/input_cords.xyz', 'r') as f:
-#     for line in f:
-#         x, y, z = map(float, line.strip().split()[:3])  # Read only the first 3 columns
-#         coords.append([x, y, z])
-#
-# # Convert to a PyTorch tensor and move to GPU
-# coords = torch.tensor(coords, dtype=torch.float32).cuda()
-#
-# # Process in batches due to memory constraints
-# results = []
-# for i in range(0, len(coords), opt.batch_size):
-#     batch_coords = coords[i:i + opt.batch_size]
-#     with torch.no_grad():
-#         batch_results = sdf_decoder(batch_coords)
-#     results.append(batch_results.cpu().numpy())
-#
-# # Concatenate all results into a single array
-# results = np.concatenate(results, axis=0)
-#
-# # Save the results to "results.txt"
-# with open('/home/likewise-open/ADM/242575/Desktop/results.txt', 'w') as f:
+# with open(f'/home/likewise-open/ADM/242575/Desktop/{opt.experiment_name}.txt', 'w') as f:
 #     for result in results:
-#         f.write(f"{result[0]}\n")
-#
-# print("Results saved to 'results.txt'")
+#         f.write(f"{result[0]} {result[1]} {result[2]} {result[3]}\n")
+# print("Results saved")
 
 
 
-
-# original code
-
-#
-# root_path = os.path.join(opt.logging_root, opt.experiment_name)
-# utils.cond_mkdir(root_path)
-#
-# sdf_meshing.create_mesh(sdf_decoder, os.path.join(root_path, 'test'), N=opt.resolution)

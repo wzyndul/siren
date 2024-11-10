@@ -4,11 +4,12 @@
 # Enable import from parent package
 import sys
 import os
+
 sys.path.append( os.path.dirname( os.path.dirname( os.path.abspath(__file__) ) ) )
 
 import dataio, meta_modules, utils, training, loss_functions, modules
 
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, random_split
 import configargparse
 
 p = configargparse.ArgumentParser()
@@ -39,7 +40,12 @@ opt = p.parse_args()
 
 
 sdf_dataset = dataio.PointCloud(opt.point_cloud_path, on_surface_points=opt.batch_size)
-dataloader = DataLoader(sdf_dataset, shuffle=True, batch_size=1, pin_memory=True, num_workers=0)
+train_size = int(0.8 * len(sdf_dataset))  # 80% training data
+val_size = len(sdf_dataset) - train_size  # 20% validation data
+train_dataset, val_dataset = random_split(sdf_dataset, [train_size, val_size])
+
+train_dataloader = DataLoader(train_dataset, shuffle=True, batch_size=1, pin_memory=True, num_workers=0)
+val_dataloader = DataLoader(val_dataset, shuffle=False, batch_size=1, pin_memory=True, num_workers=0)
 
 # Define the model.
 if opt.model_type == 'nerf':
@@ -54,7 +60,7 @@ summary_fn = utils.write_sdf_summary
 
 root_path = os.path.join(opt.logging_root, opt.experiment_name)
 
-training.train(model=model, train_dataloader=dataloader, epochs=opt.num_epochs, lr=opt.lr,
+training.train(model=model, train_dataloader=train_dataloader, epochs=opt.num_epochs, lr=opt.lr,
                steps_til_summary=opt.steps_til_summary, epochs_til_checkpoint=opt.epochs_til_ckpt,
-               model_dir=root_path, loss_fn=loss_fn, summary_fn=summary_fn, double_precision=False,
+               model_dir=root_path, loss_fn=loss_fn, summary_fn=summary_fn, val_dataloader=val_dataloader, double_precision=False,
                clip_grad=True)
