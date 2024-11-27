@@ -12,7 +12,7 @@ import modules, utils
 import sdf_meshing
 import configargparse
 import numpy as np
-
+import copy
 
 p = configargparse.ArgumentParser()
 p.add('-c', '--config_filepath', required=False, is_config_file=True, help='Path to config file.')
@@ -56,39 +56,8 @@ sdf_decoder.to(DEVICE)
 sdf_decoder.eval()
 
 
-# def find_temperature(decoder, x, y, z_min, z_max, epsilon=1e-4):
-#     device = next(decoder.parameters()).device
 
-#     best_z = None
-#     best_sdf_abs = float('inf')
-#     iterations = 0
-#     max_iterations = 50
-
-#     while z_max - z_min > epsilon and iterations < max_iterations:
-#         z_mid = (z_min + z_max) / 2
-#         point = torch.tensor([[x, y, z_mid]], device=device)
-
-#         with torch.no_grad():
-#             sdf_value = decoder(point).item()
-
-#         if abs(sdf_value) < best_sdf_abs:
-#             best_z = z_mid
-#             best_sdf_abs = abs(sdf_value)
-
-#         if abs(sdf_value) < epsilon:
-#             return z_mid
-
-#         if sdf_value > 0:
-#             z_max = z_mid
-#         else:
-#             z_min = z_mid
-        
-#         iterations += 1
-
-#     return best_z
-
-
-def find_temperature_batch(decoder, x, y, z_min, z_max, num_samples=1000):
+def find_temperature(decoder, x, y, z_min, z_max, num_samples=1000):
     z_values = torch.linspace(z_min, z_max, num_samples, device=DEVICE)
 
 
@@ -110,10 +79,19 @@ def find_temperature_batch(decoder, x, y, z_min, z_max, num_samples=1000):
 
 
 experiment = Experiment(
-api_key="RVIjdz27W32Dx6WrR51bEWg24",
+api_key="XNtLkTN57HGIOTn2TE6L1kW0N",
 project_name="siren",
 workspace="ketiovv"
 )
+
+def inverse_transform(value, coord_min, coord_max):
+    value /= 2.0
+    value += 0.5
+    value = value * (coord_max - coord_min) + coord_min
+    # value += mean
+    return value
+    
+
 
 
 
@@ -124,38 +102,80 @@ total_error = 0
 coords = []
 
 # Load coordinates from the file
-with open('/home/likewise-open/ADM/242575/Desktop/testing/testing_data.txt', 'r') as f:
+with open('/home/likewise-open/ADM/242575/Desktop/paper/poland_and_neighbours.txt', 'r') as f:
     for line in f:
         x, y, z = map(float, line.strip().split()[:3])  # Read only the first 3 columns
         coords.append([x, y, z])
+# print(coords)
+
+original_coords = copy.deepcopy(coords)
+
+# mean_all = np.mean(coords, axis=0, keepdims=True)
+# coords -= mean_all
+
+coord_max = 43.700000000000735
+coord_min = -9.399999999999826
+
+
+# coord_max = np.amax(coords)
+# coord_min = np.amin(coords)
+
+
+coord_max = np.float64(coord_max)
+coord_min = np.float64(coord_min)
+print(f"coords max: {coord_max}")
+print(f"coords max: {coord_min}")
+
+
+
+
+coords[:. :2] = (coords[:, :2] - coord_min[:, :2]) / (coord_max - coord_min)
+coords[:, :2] -= 0.5
+coords[:, :2] *= 2.
+
+
+coords[:, -1] = 
+
+
+
+
+# kolejny eksperyment cała europy 5/10 tysiecy punktów i maja to byc dane z pocatyku czerwca, potem zbiór walidacyjny np. 10000 punktów np z konca czerwca
+
+
 
 coords_tensor = torch.tensor(coords, device=DEVICE)
 
-# Process all coordinates in batches
-batch_size = 128  # Adjust batch size based on memory usage and GPU capacity
 results = []
 differences = []
 squared_errors = []
 
-for i in range(0, len(coords_tensor), batch_size):
-    batch = coords_tensor[i:i + batch_size]
-    batch_results = []
-    
-    # Process each (x, y) pair in the batch and find best z
-    for row in batch:
-        x, y, true_z = row[0].item(), row[1].item(), row[2].item()
-        predicted_z = find_temperature_batch(sdf_decoder, x, y, -11, 34)
-        
-        difference = predicted_z - true_z
-        squared_error = difference ** 2
-        batch_results.append([x, y, true_z, predicted_z])
-        differences.append(difference)
-        squared_errors.append(squared_error)
-    
-    results.extend(batch_results)
 
-    if i % 10 == 0:
+for i, row in enumerate(coords_tensor):
+    x, y, true_z = row[0].item(), row[1].item(), row[2].item()
+
+    
+    predicted_z = find_temperature(sdf_decoder, x, y, -1, 1)
+
+
+
+    x = original_coords[i][0]
+    y = original_coords[i][1]
+
+    true_z = inverse_transform(true_z, coord_min, coord_max)
+    predicted_z = inverse_transform(predicted_z, coord_min, coord_max)
+
+
+    difference = true_z - predicted_z
+    squared_error = difference ** 2
+    
+    results.append([x, y, true_z, predicted_z])
+    differences.append(difference)
+    squared_errors.append(squared_error)
+
+    if i % 1000 == 0:
         print(f"row: {i}")
+
+
 
 # Calculate final results
 total_error = sum(squared_errors)
@@ -173,7 +193,7 @@ print(f"Mean Absolute Error (MAE): {mae}")
 
 
 results = np.array(results)
-with open(f'/home/likewise-open/ADM/242575/Desktop/testing_output_12000batch.txt', 'w') as f:
+with open(f'/home/likewise-open/ADM/242575/Desktop/KONSULTACJEpoland_and_neighbours.txt', 'w') as f:
     for result in results:
         f.write(f"{result[0]} {result[1]} {result[2]} {result[3]}\n")
 print("Results saved")

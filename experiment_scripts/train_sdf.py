@@ -21,7 +21,7 @@ p.add_argument('--experiment_name', type=str, required=True,
 
 # General training options
 p.add_argument('--batch_size', type=int, default=1400)
-p.add_argument('--lr', type=float, default=1e-4, help='learning rate. default=5e-5')
+p.add_argument('--lr', type=float, default=5e-5, help='learning rate. default=5e-5') #było 1e-4
 p.add_argument('--num_epochs', type=int, default=10000,
                help='Number of epochs to train for.')
 
@@ -39,12 +39,13 @@ p.add_argument('--checkpoint_path', default=None, help='Checkpoint to trained mo
 opt = p.parse_args()
 
 
-sdf_dataset = dataio.PointCloud(opt.point_cloud_path, on_surface_points=opt.batch_size)
-train_size = int(0.8 * len(sdf_dataset))  # 80% training data
-val_size = len(sdf_dataset) - train_size  # 20% validation data
-train_dataset, val_dataset = random_split(sdf_dataset, [train_size, val_size])
+sdf_dataset = dataio.PointCloud(opt.point_cloud_path, on_surface_points=opt.batch_size, generate_points=True)
 
-train_dataloader = DataLoader(train_dataset, shuffle=True, batch_size=1, pin_memory=True, num_workers=0)
+val_dataset = dataio.PointCloud("/home/likewise-open/ADM/242575/Desktop/paper/poland_and_neighbours.txt", on_surface_points=12110, generate_points=True)
+
+
+
+train_dataloader = DataLoader(sdf_dataset, shuffle=True, batch_size=1, pin_memory=True, num_workers=0)
 val_dataloader = DataLoader(val_dataset, shuffle=False, batch_size=1, pin_memory=True, num_workers=0)
 
 # Define the model.
