@@ -36,17 +36,21 @@ p.add_argument('--point_cloud_path', type=str, default='/home/sitzmann/data/poin
                help='Options are "sine" (all sine activations) and "mixed" (first layer sine, other layers tanh)')
 
 p.add_argument('--checkpoint_path', default=None, help='Checkpoint to trained model.')
+
+p.add_argument('--validation_dataset', type=str)
+p.add_argument('--on_surface_points_val', type=int)
+
 opt = p.parse_args()
 
 
 sdf_dataset = dataio.PointCloud(opt.point_cloud_path, on_surface_points=opt.batch_size, generate_points=True)
 
-val_dataset = dataio.PointCloud("/home/likewise-open/ADM/242575/Desktop/paper/poland_and_neighbours.txt", on_surface_points=12110, generate_points=True)
-
+# val_dataset = dataio.PointCloud("/home/likewise-open/ADM/242575/Desktop/training_test/20k_rest.txt", on_surface_points=70147, generate_points=True)
+# val_dataset = dataio.PointCloud(opt.validation_dataset, on_surface_points=opt.on_surface_points_val, generate_points=True)
 
 
 train_dataloader = DataLoader(sdf_dataset, shuffle=True, batch_size=1, pin_memory=True, num_workers=0)
-val_dataloader = DataLoader(val_dataset, shuffle=False, batch_size=1, pin_memory=True, num_workers=0)
+# val_dataloader = DataLoader(val_dataset, shuffle=False, batch_size=1, pin_memory=True, num_workers=0)
 
 # Define the model.
 if opt.model_type == 'nerf':
@@ -63,5 +67,5 @@ root_path = os.path.join(opt.logging_root, opt.experiment_name)
 
 training.train(model=model, train_dataloader=train_dataloader, epochs=opt.num_epochs, lr=opt.lr,
                steps_til_summary=opt.steps_til_summary, epochs_til_checkpoint=opt.epochs_til_ckpt,
-               model_dir=root_path, loss_fn=loss_fn, summary_fn=summary_fn, val_dataloader=val_dataloader, double_precision=False,
+               model_dir=root_path, loss_fn=loss_fn, summary_fn=summary_fn, val_dataloader=None, double_precision=False,
                clip_grad=True)

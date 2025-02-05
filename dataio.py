@@ -16,6 +16,8 @@ from PIL import Image
 from torch.utils.data import Dataset
 from torchvision.transforms import Resize, Compose, ToTensor, Normalize
 
+torch.manual_seed(0)
+np.random.seed(0)
 
 def get_mgrid(sidelen, dim=2):
     '''Generates a flattened grid of (x,y,...) coordinates in a range of -1 to 1.'''
@@ -396,41 +398,46 @@ class PointCloud(Dataset):
         point_cloud = np.genfromtxt(pointcloud_path)
         print("Finished loading point cloud")
 
-        coords = point_cloud[:, :3]
+        self.coords = point_cloud[:, :3]
         self.normals = point_cloud[:, 3:]
 
         # Reshape point cloud such that it lies in bounding box of (-1, 1) (distorts geometry, but makes for high
         # sample efficiency)
 
-        # coords_mean = np.mean(coords, axis=0, keepdims=True)
-        # coords -= np.mean(coords, axis=0, keepdims=True)
+        global_min_z = -9.947546386718727
+        global_max_z = 28.101281738281273
 
 
-        if keep_aspect_ratio:
-            coord_max = np.amax(coords)
-            coord_min = np.amin(coords)
-        else:
-            coord_max = np.amax(coords, axis=0, keepdims=True)
-            coord_min = np.amin(coords, axis=0, keepdims=True)
+        global_min_z = np.float64(global_min_z)
+        global_max_z = np.float64(global_max_z)
+
+        
+
+        coord_max = np.array([[35.0, 71.0, 28.101281738281273]])
+        coord_min = np.array([[-24, 36, -9.947546386718727]])
 
 
 
-        self.coords = (coords - coord_min) / (coord_max - coord_min)
+
+        self.coords[:, :2] = (self.coords[:, :2] - coord_min[0, :2]) / (coord_max[0, :2] - coord_min[0, :2])
+
+        self.coords[:, -1] = (self.coords[:, -1] - global_min_z) / (global_max_z - global_min_z)
         self.coords -= 0.5
         self.coords *= 2.
 
         self.on_surface_points = on_surface_points
 
+        self.coord_min = global_min_z  
+        self.coord_max = global_max_z
 
-        self.coord_min = coord_min
-        self.coord_max = coord_max
-        # self.z_mean = coords_mean[0][2]
+
+
 
 
 
 
     def get_min_max_mean(self):
-        return (self.coord_min, self.coord_max)  # (self.coord_min, self.coord_max, self.z_mean)
+        return (self.coord_min, self.coord_max)
 
     def __len__(self):
         return self.coords.shape[0] // self.on_surface_points

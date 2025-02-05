@@ -9,28 +9,8 @@ import time
 import numpy as np
 import os
 import shutil
-
-
-# def find_temperature(decoder, x, y, z_min, z_max, epsilon=1e-3):
-#     device = next(decoder.parameters()).device
-#     # wygenerowac tensror z n wartosciami miedzy z min a z max - 
-#     # moduł, minimimalny indeks, i pobieram ta wartosc dla ktorej sdf był nablizszy zero
-#     while z_max - z_min > epsilon:
-#         z_mid = (z_min + z_max) / 2
-#         point = torch.tensor([[x, y, z_mid]], device=device)
-
-#         with torch.no_grad():
-#             sdf_value = decoder(point).item()
-
-#         if abs(sdf_value) < epsilon:
-#             return z_mid
-
-#         if sdf_value > 0:
-#             z_max = z_mid
-#         else:
-#             z_min = z_mid
-
-#     return (z_min + z_max) / 2
+torch.manual_seed(0)
+np.random.seed(0)
 
 
 def find_temperature(decoder, x, y, z_min, z_max, num_samples=1000):
@@ -59,7 +39,6 @@ def inverse_transform(value, coord_min, coord_max):
     value /= 2.0
     value += 0.5
     value = value * (coord_max - coord_min) + coord_min
-    # value += mean
     return value
 
 
@@ -69,7 +48,7 @@ def train(model, train_dataloader, epochs, lr, steps_til_summary, epochs_til_che
 
 
     experiment = Experiment(
-    api_key="XNtLkTN57HGIOTn2TE6L1kW0N",
+    api_key="",
     project_name="siren",
     workspace="ketiovv"
     )
@@ -441,20 +420,20 @@ def train(model, train_dataloader, epochs, lr, steps_til_summary, epochs_til_che
                 predicted_mse = np.mean(predicted_mse)
                 experiment.log_metric("training_predicted_z_mse", predicted_mse, epoch=epoch)
 
-            on_surface_accuracy = correct_on_surface / total_on_surface if total_on_surface > 0 else 0
-            of_surface_accuracy = correct_of_surface / total_of_surface if total_of_surface > 0 else 0
+            # on_surface_accuracy = correct_on_surface / total_on_surface if total_on_surface > 0 else 0
+            # of_surface_accuracy = correct_of_surface / total_of_surface if total_of_surface > 0 else 0
 
-            experiment.log_metric("training_on_surface_accuracy", on_surface_accuracy, epoch=epoch)
-            experiment.log_metric("training_of_surface_accuracy", of_surface_accuracy, epoch=epoch)
+            # experiment.log_metric("training_on_surface_accuracy", on_surface_accuracy, epoch=epoch)
+            # experiment.log_metric("training_of_surface_accuracy", of_surface_accuracy, epoch=epoch)
 
 
             avg_epoch_loss = epoch_loss / num_batches
             experiment.log_metric("epoch", epoch)
             experiment.log_metric("training_avg_loss", avg_epoch_loss, epoch=epoch)
 
-            for loss_name, total_loss in epoch_losses.items():
-                avg_loss = total_loss / num_batches
-                experiment.log_metric(f"training_{loss_name}", avg_loss, epoch=epoch)
+            # for loss_name, total_loss in epoch_losses.items():
+            #     avg_loss = total_loss / num_batches
+            #     experiment.log_metric(f"training_{loss_name}", avg_loss, epoch=epoch)
 
 
 

@@ -18,8 +18,6 @@ p = configargparse.ArgumentParser()
 p.add('-c', '--config_filepath', required=False, is_config_file=True, help='Path to config file.')
 
 p.add_argument('--logging_root', type=str, default='./logs', help='root for logging')
-p.add_argument('--experiment_name', type=str, required=True,
-               help='Name of subdirectory in logging_root where summaries and checkpoints will be saved.')
 
 # General training options
 p.add_argument('--batch_size', type=int, default=16384)
@@ -30,6 +28,8 @@ p.add_argument('--model_type', type=str, default='sine',
 p.add_argument('--mode', type=str, default='mlp',
                help='Options are "mlp" or "nerf"')
 p.add_argument('--resolution', type=int, default=1600)
+p.add_argument('--point_cloud_path', type=str)
+p.add_argument('--save_location', type=str)
 
 opt = p.parse_args()
 
@@ -79,16 +79,18 @@ def find_temperature(decoder, x, y, z_min, z_max, num_samples=1000):
 
 
 experiment = Experiment(
-api_key="XNtLkTN57HGIOTn2TE6L1kW0N",
+api_key="",
 project_name="siren",
 workspace="ketiovv"
 )
+
+
+
 
 def inverse_transform(value, coord_min, coord_max):
     value /= 2.0
     value += 0.5
     value = value * (coord_max - coord_min) + coord_min
-    # value += mean
     return value
     
 
@@ -101,45 +103,50 @@ squared_errors = []
 total_error = 0
 coords = []
 
-# Load coordinates from the file
-with open('/home/likewise-open/ADM/242575/Desktop/paper/poland_and_neighbours.txt', 'r') as f:
+with open(opt.point_cloud_path, 'r') as f:
     for line in f:
-        x, y, z = map(float, line.strip().split()[:3])  # Read only the first 3 columns
+        x, y, z = map(float, line.strip().split()[:3])
         coords.append([x, y, z])
-# print(coords)
 
 original_coords = copy.deepcopy(coords)
+coords = np.array(coords)
 
-# mean_all = np.mean(coords, axis=0, keepdims=True)
-# coords -= mean_all
 
-coord_max = 43.700000000000735
-coord_min = -9.399999999999826
 
 
 # coord_max = np.amax(coords)
 # coord_min = np.amin(coords)
 
+coord_max = np.amax(coords, axis=0, keepdims=True)
+coord_min = np.amin(coords, axis=0, keepdims=True)
 
-coord_max = np.float64(coord_max)
-coord_min = np.float64(coord_min)
-print(f"coords max: {coord_max}")
-print(f"coords max: {coord_min}")
-
-
-
-
-coords[:. :2] = (coords[:, :2] - coord_min[:, :2]) / (coord_max - coord_min)
-coords[:, :2] -= 0.5
-coords[:, :2] *= 2.
-
-
-coords[:, -1] = 
+coord_max = np.array([[35.0, 71.0, 28.101281738281273]])
+coord_min = np.array([[-24, 36, -9.947546386718727]])
 
 
 
 
-# kolejny eksperyment cała europy 5/10 tysiecy punktów i maja to byc dane z pocatyku czerwca, potem zbiór walidacyjny np. 10000 punktów np z konca czerwca
+
+coords[:, :2] = (coords[:, :2] - coord_min[0, :2]) / (coord_max[0, :2] - coord_min[0, :2])
+
+
+global_min_z = -9.947546386718727
+global_max_z = 28.101281738281273
+
+# global_min_z = -12
+# global_max_z = 32  
+
+global_min_z = np.float64(global_min_z)
+global_max_z = np.float64(global_max_z)
+
+
+coords[:, -1] = (coords[:, -1] - global_min_z) / (global_max_z - global_min_z)
+
+
+coords -= 0.5
+coords *= 2.
+
+
 
 
 
@@ -161,8 +168,8 @@ for i, row in enumerate(coords_tensor):
     x = original_coords[i][0]
     y = original_coords[i][1]
 
-    true_z = inverse_transform(true_z, coord_min, coord_max)
-    predicted_z = inverse_transform(predicted_z, coord_min, coord_max)
+    true_z = inverse_transform(true_z, global_min_z, global_max_z)
+    predicted_z = inverse_transform(predicted_z, global_min_z, global_max_z)
 
 
     difference = true_z - predicted_z
@@ -193,15 +200,12 @@ print(f"Mean Absolute Error (MAE): {mae}")
 
 
 results = np.array(results)
-with open(f'/home/likewise-open/ADM/242575/Desktop/KONSULTACJEpoland_and_neighbours.txt', 'w') as f:
+with open(opt.save_location, 'w') as f:
     for result in results:
         f.write(f"{result[0]} {result[1]} {result[2]} {result[3]}\n")
 print("Results saved")
 
-# with open(f'/home/likewise-open/ADM/242575/Desktop/{opt.experiment_name}.txt', 'w') as f:
-#     for result in results:
-#         f.write(f"{result[0]} {result[1]} {result[2]} {result[3]}\n")
-# print("Results saved")
+
 
 
 

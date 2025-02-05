@@ -6,7 +6,8 @@ import numpy as np
 from collections import OrderedDict
 import math
 import torch.nn.functional as F
-
+np.random.seed(0)
+torch.manual_seed(0)
 
 class BatchLinear(nn.Linear, MetaModule):
     '''A linear meta-layer that can deal with batched weight matrices and biases, as for instance output by a
